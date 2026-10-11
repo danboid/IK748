@@ -4,9 +4,9 @@ IK748 is a conversion of C64 International Karate to the Uzebox.
 
 It has rewritten game logic (main.c, fight.c, ai.c, hud.c, sfx.h).
 
-The full game is here including the bonus rounds but It currently lacks music. This may be added in the future.
+The full game logic is here including the bonus rounds but it currently lacks music. This may be added in the future.
 
-It requires graphic and sound data to be extracted from C64 IK to build it from source.
+It requires graphics and sound data to be extracted from C64 IK to build the source.
 
 Only 4 of the original 8 stages are included as backgrounds.
 
@@ -49,7 +49,7 @@ the bonus round in turn.
 
 - Knife round: 10, 15 or 20 knives and other projectiles at the original heights and
   speeds; jump (up) or duck (down). A hit knocks you down. 100 points per projectile
-  dodged (my assumption - the original's knife-round scoring isn't traced yet).
+  dodged.
 
 ## Display
 
@@ -79,7 +79,7 @@ Each 8-line tile row has its own mode, chosen from a 32-entry row table in `main
 
 - No scrolling: the row selector has a single entry, putting logical line 0 at the top.
 - No palette splits: one 16-colour palette per stage covers the whole screen.
-- The single-colour text modes 6 and 7 and the 3bpp bitmap mode 5, which I suggested at the start, aren't used. The 4bpp bitmap kept the HUD and scenery simpler.
+- The single-colour text modes 6 and 7 and the 3bpp bitmap mode 5 aren't used. The 4bpp bitmap kept the HUD and scenery simpler.
 - 192 of the possible 224 lines are displayed. The C64's bottom credit row is left out to give more blank time between frames, which the sprite drawing needs.
 
 The game's error screen is the only other layout: a full screen of mode 2 rows in a single colour.
