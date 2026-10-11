@@ -51,6 +51,39 @@ the bonus round in turn.
   speeds; jump (up) or duck (down). A hit knocks you down. 100 points per projectile
   dodged (my assumption - the original's knife-round scoring isn't traced yet).
 
+## Display
+
+IK uses video mode 748. It splits the screen into three sections using Mode 748's per-row modes.
+Each 8-line tile row has its own mode, chosen from a 32-entry row table in `main.c`. The port uses three of them:
+
+| Tile rows | Lines | Row mode | What's there |
+|---|---|---|---|
+| 0–11 | 0–95 | Mode 4: 4bpp bitmap streamed from SPI RAM | HUD (rows 0–1) and the scenery |
+| 12–23 | 96–191 | Mode 0: 4bpp tiles | Ground, referee, fighters and all other sprites |
+| 24–31 | not displayed | Mode 2: plain separator rows | Unused padding at the end of the table |
+
+**Mode 4 rows (the top half)**
+
+- The scenery and HUD are one 192-pixel-wide, 16-colour bitmap per stage in SPI RAM, so the original's full palette is kept.
+- Mode 4 has to start the frame, which is one reason the HUD is drawn into this bitmap rather than in a separate text mode.
+- The bitmap's leftmost 24 pixels come from a small RAM buffer instead of SPI. The picture is offset to start at x=24, so that column is plain black, and one shared 96-byte buffer serves all twelve rows.
+- The HUD text, scores and markers are written straight into the bitmap's top lines in SPI RAM.
+
+**Mode 0 rows (the bottom half)**
+
+- Each stage's ground is a set of up to 256 ROM tiles in flash, with the tile map for each row in SPI RAM.
+- These are the only rows where Mode 748 can draw sprites, which is why the screen is split here. The fighters, speech bubbles, brick stack and knives are all sprite tiles from SPI RAM, drawn into RAM tiles on these rows.
+- A fighter's jump only ever reaches 13 lines above the C64's ground band, so it never needs sprites in the bitmap area.
+
+**What isn't used**
+
+- No scrolling: the row selector has a single entry, putting logical line 0 at the top.
+- No palette splits: one 16-colour palette per stage covers the whole screen.
+- The single-colour text modes 6 and 7 and the 3bpp bitmap mode 5, which I suggested at the start, aren't used. The 4bpp bitmap kept the HUD and scenery simpler.
+- 192 of the possible 224 lines are displayed. The C64's bottom credit row is left out to give more blank time between frames, which the sprite drawing needs.
+
+The game's error screen is the only other layout: a full screen of mode 2 rows in a single colour.
+
 ## Notes
 
 - Sprites are redrawn only when they change, starting as soon as the last line is rendered;
