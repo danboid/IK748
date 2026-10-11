@@ -1,11 +1,14 @@
 # IK748 - International Karate C64 ported to Uzebox video mode 748
 
-IK748 features rewritten game logic (main.c, fight.c, ai.c, hud.c, sfx.h) but requires graphic and sound
-data to be ripped from the C64 version to build.
+IK748 is a conversion of C64 International Karate to the Uzebox.
 
-It currently lacks music. This may be added in the future.
+It has rewritten game logic (main.c, fight.c, ai.c, hud.c, sfx.h).
 
-Only 4 of the original 8 stages are included.
+The full game is here including the bonus rounds but It currently lacks music. This may be added in the future.
+
+It requires graphic and sound data to be extracted from C64 IK to build it from source.
+
+Only 4 of the original 8 stages are included as backgrounds.
 
 ## Build
 
