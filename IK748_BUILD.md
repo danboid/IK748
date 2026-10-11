@@ -1,4 +1,6 @@
-Here's the full build of ik748 from scratch. Its quite tricky but its to avoid distributing copyrighted game data and allows this code to be distributed legally.
+Here's a full build of ik748 from scratch.
+
+It's quite tricky but it avoids distributing copyrighted game data and allows this code to be distributed legally.
 
 **1. One-time setup**
 
@@ -12,7 +14,7 @@ Here's the full build of ik748 from scratch. Its quite tricky but its to avoid d
 
 **2. Start clean**
 
-If you've done a previoys build, run:
+If you've done a previous build, run:
 
 ```
 cd ~/src/uzebox/demos/ik748
@@ -68,7 +70,6 @@ It should report 35 moves, 199 steps and 20 tables, and also write `../build/ik_
 **8. Build the game**
 
 ```
-cd ..
 make clean
 make
 ```
@@ -82,4 +83,4 @@ The game is `_bin_/ik748.hex`. For an `.uze` file as well, add `PACKROM=../../to
 
 **9. Run it**
 
-Copy `_bin_/ik748.uze` (or the `.hex`) and `build/ikspi.bin` to the SD card root. In CUzeBox, put `ikspi.bin` in the same folder as the `.hex`.
+Copy `_bin_/ik748.uze` and `build/ikspi.bin` to the SD card root. In CUzeBox, put `ikspi.bin` in the same folder as the `.hex`.
