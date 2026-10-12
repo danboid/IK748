@@ -247,6 +247,18 @@ static u16  pad_latch[2], pad_prev;
 static u8   bubble = 0xFFU;          /* speech bubble beside the referee, 0xFF = none */
 static u8   bouts, wins, klevel;      /* running order (C64 rules) */
 
+/* Bout timer (C64 rules): 30 s for one player, 60 s for two; one second per 50 C64
+** frames (60 here); it keeps running through point sequences, not in bonus rounds.
+** The winner gets 100 points per second left. */
+#ifndef BOUT_TIME_1P
+#define BOUT_TIME_1P 30U
+#endif
+#ifndef BOUT_TIME_2P
+#define BOUT_TIME_2P 60U
+#endif
+static u8   tsec, tfr;
+static bool time_dirty, bout_won;
+
 static const char s_over[]  PROGMEM = "GAME OVER";
 static const char s_p1[]    PROGMEM = "1 PLAYER";
 static const char s_p2[]    PROGMEM = "2 PLAYERS";
@@ -290,6 +302,7 @@ static void c64_sound_frame(void)          /* per video frame: the delayed sampl
 	if ((snd_delay_left != 0U) && (--snd_delay_left == 0U) && (snd_delay_fx < SFX_PCM_COUNT)) { sfx(snd_delay_fx); }
 }
 static void after_bout(void);
+static void hud_time(void);
 #if HAVE_BONUS
 static void bonus_step(void);
 static void bonus_begin(u8 kind, u8 next_stage);
@@ -333,6 +346,7 @@ static void hud_redraw(void)
 	hud_blank(0U, 9U, 40U);
 	marks(b, fgt[0].points);    hud_text(1U, 9U, b, COL_WHITE);
 	marks(b, fgt[1].points);    hud_text(36U, 9U, b, COL_RED);
+	hud_time();
 	hud_blank(8U, 2U, 24U);
 	if (msg != 0) {
 		len = (u8)strlen_P(msg);
@@ -342,6 +356,15 @@ static void hud_redraw(void)
 }
 
 static void say(const char* m, u8 colour) { msg = m; msg_colour = colour; hud_dirty = true; }
+
+static void hud_time(void)
+{
+	char b[8];
+	b[0]='T'; b[1]='I'; b[2]='M'; b[3]='E'; b[4]=' ';
+	b[5] = (char)('0' + tsec / 10U); b[6] = (char)('0' + tsec % 10U); b[7] = 0;
+	hud_text(16U, 9U, b, (tsec <= 5U) ? COL_RED : COL_WHITE);
+	time_dirty = false;
+}
 #if HAVE_BONUS
 static void bub(u8 b) { bubble = b; }
 #else
@@ -360,6 +383,8 @@ static void ready(void)
 	state = ST_READY; timer = T_READY;
 	fgt_vis = 3U;
 	bub(BUB_BEGIN);
+	bout_won = false;
+	hud_dirty = true;                /* scores and point markers back on after a reset */
 }
 
 static void new_stage(u8 s)
@@ -368,6 +393,8 @@ static void new_stage(u8 s)
 	set_stage(s);
 	hud_init(pgm_read_dword(&stage_bitmap[s]));
 	fgt[0].points = fgt[1].points = 0U;
+	tsec = (players == 1U) ? BOUT_TIME_1P : BOUT_TIME_2P;
+	tfr  = 30U;                      /* the C64's first second is half length */
 	ready();
 }
 
@@ -392,9 +419,10 @@ static void award(hit_t const* h)
 
 	fight_start_move(v, h->react);
 	fgt[v].req = h->react;
+	hud_dirty = true;                /* show the new score and point markers */
 	fgt[a].req = win ? MOVE_VICTORY : MOVE_STAND;
 
-	if (win) { winner = a; bub(a ? BUB_RED_WINS : BUB_WHITE_WINS); }
+	if (win) { winner = a; bout_won = true; bub(a ? BUB_RED_WINS : BUB_WHITE_WINS); }
 	else     { bub(h->full ? BUB_FULL_POINT : BUB_HALF_POINT); }
 	state = ST_POINT; timer = T_POINT;
 }
@@ -457,10 +485,25 @@ static void game_step(void)
 		break;
 	case ST_FIGHT:
 		if (fight_hit_test(&h)) { award(&h); }
+		else if (tsec == 0U) {
+			/* time up: more points wins, then higher score; a complete tie restarts the bout */
+			u8 a = (fgt[0].points != fgt[1].points) ? ((fgt[1].points > fgt[0].points) ? 1U : 0U)
+			     : (fgt[0].score  != fgt[1].score)  ? ((fgt[1].score  > fgt[0].score)  ? 1U : 0U) : 0xFFU;
+			if (a == 0xFFU) {
+				fgt[0].points = fgt[1].points = 0U;
+				tsec = (players == 1U) ? BOUT_TIME_1P : BOUT_TIME_2P; tfr = 30U;
+				ready();
+			} else {
+				winner = a; bout_won = true;
+				fgt[a].req = MOVE_VICTORY; fgt[a ^ 1U].req = MOVE_STAND;
+				bub(a ? BUB_RED_WINS : BUB_WHITE_WINS);
+				state = ST_POINT; timer = T_POINT; hud_dirty = true;
+			}
+		}
 		break;
 	case ST_POINT:
 		if (--timer == 0U) {
-			if ((fgt[winner].req == MOVE_VICTORY) && (fgt[winner].points >= 4U)) {
+			if (bout_won) {
 				if ((players == 1U) && (winner == 1U)) {
 					state = ST_OVER; timer = T_OVER; say(s_over, COL_RED); sfx(SFX_LOSE);
 				} else {
@@ -472,6 +515,10 @@ static void game_step(void)
 		}
 		break;
 	case ST_WIN:
+		if (tsec != 0U) {                /* time bonus: 100 points per second left */
+			tsec --; fgt[winner].score ++; hud_dirty = true; sfx(SFX_BLIP);
+			if (timer < 2U) { timer = 2U; }
+		}
 		if (--timer == 0U) {
 			if (players == 1U) { level ++; }
 			after_bout();
@@ -749,7 +796,8 @@ int main(void)
 		ClearVsyncFlag();
 		/* Only one SPI-heavy job per vblank: HUD text, or a sprite redraw.
 		** Sprites keep their RAM tiles on frames without a redraw. */
-		if (hud_dirty)   { hud_redraw(); }
+		if (hud_dirty)        { hud_redraw(); }
+		else if (time_dirty)  { hud_time(); }
 		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
 #ifdef DEBUG_TIMING
 		{ static u8 t; if ((++t & 31U) == 0U) { char b[12]; b[0]='L'; b[1]=(char)('0'+(late_rows>9U?9U:late_rows)); b[2]=' '; b[3]='S'; b[4]=(char)('0'+state);
@@ -759,6 +807,9 @@ int main(void)
 		pad_latch[1] |= ReadJoypad(1U);
 
 		c64_sound_frame();
+		if (((state == ST_READY) || (state == ST_FIGHT) || (state == ST_POINT)) && (tsec != 0U)) {
+			if (--tfr == 0U) { tfr = 60U; tsec --; time_dirty = true; }
+		}
 		if (++clk >= STEP_FRAMES) { clk = 0U; game_step(); redraw = true; }
 #if HAVE_BONUS
 		if (state == ST_BONUS) { bonus_frame(); }
