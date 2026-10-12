@@ -1,5 +1,7 @@
 # IK748 - International Karate C64 ported to Uzebox video mode 748
 
+<img src="IK748.png" alt="IK748 screenshot" />
+
 IK748 is a conversion of C64 International Karate to the Uzebox.
 
 It has rewritten game logic (main.c, fight.c, ai.c, hud.c, sfx.h).
