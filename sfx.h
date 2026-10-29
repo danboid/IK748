@@ -9,9 +9,22 @@
 
 #include "ik_sfx.h"     /* the game's own sampled effects, from export_moves.py */
 
+/* Music (optional): sid2uze output in the build folder. Its patches go first in the
+** patch table, so the effect numbers below are offset by the music patch count. */
+#if __has_include("ikmusic_stream.h")
+	#define HAVE_MUSIC 1
+	#define IKMUSIC_NO_TABLE
+	#include "ikmusic_patches.inc"
+	#include "ikmusic_stream.h"
+	#define SFX_BASE IKMUSIC_PATCH_COUNT
+#else
+	#define HAVE_MUSIC 0
+	#define SFX_BASE 0
+#endif
+
 /* The six sampled effects play on the inline mixer's PCM channel (channel 5,
 ** SOUND_CHANNEL_5_ENABLE=1), one at a time as on the C64. The synthesised patches cover events the C64 doesn't voice. */
-enum { SFX_C64_0, SFX_C64_1, SFX_C64_2, SFX_C64_3, SFX_C64_4, SFX_C64_5,
+enum { SFX_C64_0 = SFX_BASE, SFX_C64_1, SFX_C64_2, SFX_C64_3, SFX_C64_4, SFX_C64_5,
        SFX_BLOCK, SFX_WIN, SFX_LOSE, SFX_BLIP, SFX_BEGIN };
 
 static const char p_block[] PROGMEM = {       /* dry click */
@@ -36,6 +49,9 @@ static const char p_pcm4[] PROGMEM = { 0,PC_PITCH,SFX_PCM_NOTE, SFX_PCM_TICKS_4,
 static const char p_pcm5[] PROGMEM = { 0,PC_PITCH,SFX_PCM_NOTE, SFX_PCM_TICKS_5,PC_NOTE_CUT,0, 0,PATCH_END };
 
 static const struct PatchStruct sfx_patches[] PROGMEM = {
+#if HAVE_MUSIC
+	IKMUSIC_PATCH_ENTRIES,
+#endif
 	{2,sfx_pcm_0,p_pcm0,SFX_PCM_LEN_0,SFX_PCM_LEN_0+64}, {2,sfx_pcm_1,p_pcm1,SFX_PCM_LEN_1,SFX_PCM_LEN_1+64},
 	{2,sfx_pcm_2,p_pcm2,SFX_PCM_LEN_2,SFX_PCM_LEN_2+64}, {2,sfx_pcm_3,p_pcm3,SFX_PCM_LEN_3,SFX_PCM_LEN_3+64},
 	{2,sfx_pcm_4,p_pcm4,SFX_PCM_LEN_4,SFX_PCM_LEN_4+64}, {2,sfx_pcm_5,p_pcm5,SFX_PCM_LEN_5,SFX_PCM_LEN_5+64},

@@ -268,7 +268,25 @@ static const char s_start[] PROGMEM = "PRESS START";
 #define COL_RED   2U
 #define COL_MSG   7U
 
-static void sfx(u8 n) { TriggerFx(n, (n < SFX_PCM_COUNT) ? 0xFFU : 0xD0U, true); }
+static void sfx(u8 n) { TriggerFx(n, ((n >= SFX_C64_0) && (n < SFX_C64_0 + SFX_PCM_COUNT)) ? 0xFFU : 0xD0U, true); }
+
+#if HAVE_MUSIC
+/* Streamed music: the song lives in SPI RAM (SPI_MUSIC); the kernel's stream engine
+** reads it from a small RAM ring buffer, which this tops up in the blank period. */
+u8   SongBufFull(void);
+void SongBufWrite(u8 t);
+static u32 mus_pos;
+static void music_feed(void)
+{
+	u8 n = 0U;
+	while ((n < 24U) && !SongBufFull()) {
+		u32 a = SPI_MUSIC + mus_pos;
+		SongBufWrite(SpiRamReadU8((u8)(a >> 16), (u16)(a)));
+		if (++mus_pos >= IKMUSIC_STREAM_LEN) { mus_pos = IKMUSIC_STREAM_LOOP; }
+		n ++;
+	}
+}
+#endif
 
 /* The C64's sound rules: when a fighter's animation frame changes and the new
 ** frame is one of the eleven sound keys, a sample plays - for attack steps
@@ -295,11 +313,11 @@ static void c64_sound(u8 i, u8 mode)
 	} else if (fgt[i].sflags & SND_ATTACK_FLAGS) {
 		v = pgm_read_byte(&snd_attack[y]);
 	}
-	if (v < SFX_PCM_COUNT) { sfx(v); }
+	if (v < SFX_PCM_COUNT) { sfx((u8)(SFX_C64_0 + v)); }
 }
 static void c64_sound_frame(void)          /* per video frame: the delayed sample */
 {
-	if ((snd_delay_left != 0U) && (--snd_delay_left == 0U) && (snd_delay_fx < SFX_PCM_COUNT)) { sfx(snd_delay_fx); }
+	if ((snd_delay_left != 0U) && (--snd_delay_left == 0U) && (snd_delay_fx < SFX_PCM_COUNT)) { sfx((u8)(SFX_C64_0 + snd_delay_fx)); }
 }
 static void after_bout(void);
 static void hud_time(void);
@@ -784,6 +802,11 @@ int main(void)
 	if (err != 0U) { show_error(err); }
 
 	InitMusicPlayer(sfx_patches);
+#if HAVE_MUSIC
+	mus_pos = 0U;
+	music_feed();
+	StartSong();
+#endif
 	fight_init();
 	fgt[0].score = fgt[1].score = 0U;
 	title();
@@ -800,12 +823,21 @@ int main(void)
 		else if (time_dirty)  { hud_time(); }
 		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
 #ifdef DEBUG_TIMING
-		{ static u8 t; if ((++t & 31U) == 0U) { char b[12]; b[0]='L'; b[1]=(char)('0'+(late_rows>9U?9U:late_rows)); b[2]=' '; b[3]='S'; b[4]=(char)('0'+state);
-		  b[5]=' '; b[6]=(char)('0'+fgt[0].points); b[7]=(char)('0'+fgt[1].points); b[8]=' '; b[9]=(char)('A'+(fgt[0].move>25U?25U:fgt[0].move)); b[10]=(char)('A'+(fgt[1].move>25U?25U:fgt[1].move)); b[11]=0; hud_text(14U, 9U, b, 7U); } }
+		{ static u8 t; if ((++t & 31U) == 0U) { char b[14]; b[0]='L'; b[1]=(char)('0'+(late_rows>9U?9U:late_rows)); b[2]=' '; b[3]='S'; b[4]=(char)('0'+state);
+		  b[5]=' '; b[6]=(char)('0'+fgt[0].points); b[7]=(char)('0'+fgt[1].points); b[8]=' ';
+#if HAVE_MUSIC
+		  { extern volatile u16 songPos; extern u8 songStalls; u16 p = songPos; b[9]=(char)('A'+((p>>12)&15)); b[10]=(char)('A'+((p>>8)&15)); b[11]=(char)('0'+(songStalls>9U?9U:songStalls)); b[12]=0; }
+#else
+		  b[9]=0;
+#endif
+		  hud_text(14U, 9U, b, 7U); } }
 #endif
 		pad_latch[0] |= ReadJoypad(0U);
 		pad_latch[1] |= ReadJoypad(1U);
 
+#if HAVE_MUSIC
+		music_feed();                          /* still in the blank period */
+#endif
 		c64_sound_frame();
 		if (((state == ST_READY) || (state == ST_FIGHT) || (state == ST_POINT)) && (tsec != 0U)) {
 			if (--tfr == 0U) { tfr = 60U; tsec --; time_dirty = true; }

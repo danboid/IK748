@@ -47,10 +47,20 @@ python3 capture_bonus.py bonus4.pkl
 
 It waits for a demo bout to end, forces the breaking round, and saves the stack intact and fully cracked. Wait for `saved bonus4.pkl`, then close VICE.
 
+**5.5 Capture the SID output and convert it to Uzebox sound engine format (optional)
+
+Dump RAM while the demo plays, convert, and give the stream song to convert748.
+
+    python3 -c "from bm import BM; m=BM(); m.cmd(0x81); open('ram_music.bin','wb').write(m.mem(0,0xffff,'cpu')); m.resume()"
+    python3 sid2uze.py convert --ram ram_music.bin --init AE00,AE09 --play AE0C \
+        --seconds 900 --cache ik_log.pkl --out ikmusic
+    cp ikmusic_patches.inc ikmusic_stream.h build/
+    python3 convert748.py ... --music ikmusic_stream.bin
+
 **6. Convert the graphics and bonus data**
 
 ```
-python3 convert748.py --out build --stage s1=tr_363717b0.pkl --stage s2=tr_d2e9b449.pkl --stage s3=tr_ee06c810.pkl --stage s4=tr_b66c10a8.pkl --bonus4 bonus4.pkl
+python3 convert748.py --out build --stage s1=tr_363717b0.pkl --stage s2=tr_d2e9b449.pkl --stage s3=tr_ee06c810.pkl --stage s4=tr_b66c10a8.pkl --bonus4 bonus4.pkl --music ikmusic_stream.bin
 ```
 
 Use the keys step 4 printed if they differ; the order of the `--stage` options sets the stage order in the game. Check that the output:
