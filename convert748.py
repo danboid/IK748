@@ -242,6 +242,7 @@ def main():
     ap.add_argument('--section', default='.tiles',
                     help='linker section for 256-byte aligned data (recolour table first, then ROM tiles); '
                          'set M74_RECTB_OFF to its start address')
+    ap.add_argument('--music', help='song from sid2uze (NAME_stream.bin), stored in SPI RAM as SPI_MUSIC')
     ap.add_argument('--bonus4', help='breaking-round capture from capture_bonus.py (enables the bonus rounds)')
     ap.add_argument('--bitmap-rows', type=int, default=12, help='tile rows 0..N-1 shown in mode 4')
     a = ap.parse_args()
@@ -271,6 +272,8 @@ def main():
         bonus = build_bonus(ram, a.bonus4, a.xoff, black)
         put('SPI_BONUS_TILES', bonus['tiles'])
         put('SPI_FIGHTER_MASKS', bonus['masks'])
+    if a.music:
+        put('SPI_MUSIC', open(a.music, 'rb').read())
     if len(spi) > SPI_LIMIT:
         raise SystemExit('SPI image %d bytes exceeds 128 KB' % len(spi))
     open(os.path.join(a.out, 'ikspi.bin'), 'wb').write(spi)
