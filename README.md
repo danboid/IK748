@@ -6,11 +6,12 @@ IK748 is a conversion of C64 International Karate to the Uzebox.
 
 It has rewritten game logic (main.c, fight.c, ai.c, hud.c, sfx.h).
 
-The full game logic is here including the bonus rounds but it currently lacks music. This may be added in the future.
+The full game logic is here including the bonus rounds.
 
-It requires graphics and sound data to be extracted from C64 IK to build the source.
+It requires graphics, sound and optionally music data to be extracted from C64 IK to build the source.
 
-Only 4 of the original 8 stages are included as backgrounds.
+sid2uze.py was written to convert the Rob Hubbard composed music for this IK port. sid2uze should be
+reusable by other C64 to m748 ports. Maybe it can be expanded to support more SPI RAM video modes?
 
 ## Build
 
