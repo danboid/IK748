@@ -71,18 +71,58 @@ static void show_error(u8 code)
 
 /* ------------------------------------------------------------- SD -> SPI */
 
-static u8 load_spi_image(void)
+/* Copies left bytes into SPI RAM from the file's current sector on. */
+static u8 load_from(sdc_struct_t* sds, u32 left)
 {
-	sdc_struct_t sds;
-	u32 left = SPI_USED;
-	u32 clus;
 	u16 addr = 0U;
 	u16 n;
 	u8  bank = 0U;
 
+	while (left != 0U) {
+		if (FS_Read_Sector(sds) != 0U) { return 3U; }
+		n = (left > 512U) ? 512U : (u16)(left);
+		SpiRamWriteFrom(bank, addr, sds->bufp, n);   /* 512-byte steps never straddle 64K */
+		addr += n;
+		if (addr == 0U) { bank ++; }
+		left -= n;
+		if ((left != 0U) && (FS_Next_Sector(sds) != 0U)) { return 3U; }
+	}
+	return 0U;
+}
+
+/* The SPI RAM data comes from the game's own IK748.UZE, where `make` appends
+** build/ikspi.bin after the program, from the next whole sector (as stuntcar-uzebox
+** does): the header gives the program's size. If the .uze has been renamed or has no
+** data appended, a separate IKSPI.BIN is loaded instead. */
+static u8 load_spi_image(void)
+{
+	sdc_struct_t sds;
+	u32 clus;
+	u8* h;
+
 	sds.bufp = (u8*)(RT_BASE * 32U);   /* RAM tile area is free until sprites run */
 	if (FS_Init(&sds) != 0U) { return 1U; }
 	if (SpiRamInit() == 0U)  { return 4U; }
+
+	clus = FS_Find(&sds,
+	    ((u16)('I') << 8) | (u16)('K'),
+	    ((u16)('7') << 8) | (u16)('4'),
+	    ((u16)('8') << 8) | (u16)(' '),
+	    ((u16)(' ') << 8) | (u16)(' '),
+	    ((u16)('U') << 8) | (u16)('Z'),
+	    ((u16)('E') << 8) | (u16)(0));
+	if (clus != 0U) {
+		FS_Select_Cluster(&sds, clus);
+		h = sds.bufp;
+		if ((FS_Read_Sector(&sds) == 0U) &&
+		    (h[0] == 'U') && (h[1] == 'Z') && (h[2] == 'E') && (h[3] == 'B') && (h[4] == 'O') && (h[5] == 'X')) {
+			u32 prog = (u32)h[8] | ((u32)h[9] << 8) | ((u32)h[10] << 16) | ((u32)h[11] << 24);
+			u16 skip = (u16)((512UL + prog + 511UL) / 512UL);   /* header + program, whole sectors */
+			u8  ok = 1U;
+			while ((skip != 0U) && ok) { if (FS_Next_Sector(&sds) != 0U) { ok = 0U; } skip --; }
+			if (ok && (load_from(&sds, SPI_USED) == 0U)) { return 0U; }
+		}
+	}
 
 	clus = FS_Find(&sds,
 	    ((u16)('I') << 8) | (u16)('K'),
@@ -93,17 +133,7 @@ static u8 load_spi_image(void)
 	    ((u16)('N') << 8) | (u16)(0));
 	if (clus == 0U) { return 2U; }
 	FS_Select_Cluster(&sds, clus);
-
-	while (left != 0U) {
-		if (FS_Read_Sector(&sds) != 0U) { return 3U; }
-		n = (left > 512U) ? 512U : (u16)(left);
-		SpiRamWriteFrom(bank, addr, sds.bufp, n);   /* 512-byte steps never straddle 64K */
-		addr += n;
-		if (addr == 0U) { bank ++; }
-		left -= n;
-		if ((left != 0U) && (FS_Next_Sector(&sds) != 0U)) { return 3U; }
-	}
-	return 0U;
+	return load_from(&sds, SPI_USED);
 }
 
 /* ----------------------------------------------------------------- stage */

@@ -110,8 +110,8 @@ It should end with these two checks:
 - `RAM: globals end at 0x008005xx (limit 0x008005A0)`: any value at or below the limit (about `0x0080058a` with music).
 - `fighter_recolor at 0x0000c000 (must be 0x0000c000)`
 
-The game is `_bin_/ik748.hex`. For an `.uze` file as well, add `PACKROM=../../tools/packrom/packrom`, once packrom is built.
+`make` then builds `_bin_/ik748.uze`: the game with `build/ikspi.bin` appended after the program, padded to a whole sector, as stuntcar-uzebox does. It prints its size (about 185 KB). packrom comes from your PATH if it's there; otherwise the Makefile builds it from the Uzebox repo's `tools/packrom` (needs `g++`; set `UZEBOX=/path/to/uzebox` if this folder isn't in `uzebox/demos`). `_bin_/ik748.hex` is the program alone.
 
 **11. Run it**
 
-Copy `_bin_/ik748.uze` (or the `.hex`) and `build/ikspi.bin` to the SD card root. In CUzeBox, put `ikspi.bin` in the same folder as the `.hex`.
+Copy `_bin_/ik748.uze` to the SD card root: it's the only file needed. Keep its name `ik748.uze`, because the game finds its SPI RAM data by opening its own file. (If the `.uze` is renamed, or you run the bare `.hex`, the game falls back to loading a separate `ikspi.bin` from the SD card root, as older builds did.) In CUzeBox, open `ik748.uze` itself.

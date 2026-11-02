@@ -11,7 +11,10 @@ MCU        = atmega644
 CC         = avr-gcc
 KERNEL_DIR ?= ../../kernel
 ASSETS_DIR ?= build
-PACKROM    ?= packrom
+UZEBOX     ?= ../..
+# packrom from PATH, else built from the Uzebox repo's tools/packrom (as stuntcar-uzebox does)
+PACKROM    ?= $(if $(shell command -v packrom 2>/dev/null),packrom,.tools/packrom)
+UZE        = $(OUTDIR)/$(GAME).uze
 OUTDIR     = _bin_
 OBJDIR     = _obj_
 
@@ -31,8 +34,19 @@ OBJECTS = $(OBJDIR)/uzeboxVideoEngineCore.o $(OBJDIR)/uzeboxCore.o \
           $(OBJDIR)/uzeboxVideoEngine.o $(OBJDIR)/spiram.o $(OBJDIR)/bootlib.o \
           $(OBJDIR)/main.o $(OBJDIR)/fight.o $(OBJDIR)/hud.o $(OBJDIR)/ai.o
 
-all: $(OUTDIR)/$(GAME).hex check
-	-$(PACKROM) $(OUTDIR)/$(GAME).hex $(OUTDIR)/$(GAME).uze gameinfo.properties
+all: $(OUTDIR)/$(GAME).hex check uze
+
+# The .uze: packrom's header and program, padded to a whole 512-byte sector, then
+# $(ASSETS_DIR)/ikspi.bin. The game loads SPI RAM from its own .uze (see
+# load_spi_image() in main.c), so only the .uze needs copying to the SD card.
+uze: $(OUTDIR)/$(GAME).hex $(filter .tools/%,$(PACKROM)) $(ASSETS_DIR)/ikspi.bin
+	$(PACKROM) $(OUTDIR)/$(GAME).hex $(UZE) gameinfo.properties
+	n=$$(wc -c < $(UZE)); dd if=/dev/zero bs=1 count=$$(( (512 - n % 512) % 512 )) 2>/dev/null >> $(UZE)
+	cat $(ASSETS_DIR)/ikspi.bin >> $(UZE)
+	@echo "$(UZE): $$(wc -c < $(UZE)) bytes (game + SPI RAM data)"
+
+.tools/packrom: $(UZEBOX)/tools/packrom/packrom.cpp
+	mkdir -p .tools && g++ -O2 -o $@ $<
 
 $(OBJDIR) $(OUTDIR):
 	mkdir -p $@
@@ -65,7 +79,7 @@ check: $(OUTDIR)/$(GAME).elf
 clean:
 	rm -rf $(OBJDIR) $(OUTDIR)
 
-.PHONY: all check clean
+.PHONY: all check clean uze
 
 $(OBJDIR)/fight.o: fight.c fight.h m74cfg.h $(wildcard $(ASSETS_DIR)/*.h) | $(OBJDIR)
 	$(CC) $(INCLUDES) $(CFLAGS) -c $< -o $@
