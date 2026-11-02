@@ -211,7 +211,9 @@ def split_notes(frames):
     notes, cur = [], None
     for i, (gate, ctrl, freq, pw, ad, sr, retrig) in enumerate(frames):
         if retrig:
-            if cur: cur['end'] = i; notes.append(cur)
+            if cur:
+                if cur['end'] is None: cur['end'] = i     # keep the real gate-off if there was one
+                notes.append(cur)
             cur = dict(start=i, end=None, frames=[], ad=ad, sr=sr)
         if cur is not None:
             if gate: cur['frames'].append((ctrl, freq, pw))
@@ -456,6 +458,7 @@ def coarse_adsr(ad, sr):
     return (a << 4) | d, (su << 4) | (sr & 15)
 
 GAP_FRAMES = 4
+MAX_TAIL = 2.0
 
 def convert(tune, frames, out, cache=None, forced_loop=None):
     import os, pickle
@@ -471,6 +474,16 @@ def convert(tune, frames, out, cache=None, forced_loop=None):
     else: loop = find_note_loop(notes, frames) or find_note_loop_tolerant(notes, frames) or find_tail_loop(notes, frames)
     end = (loop[0] + loop[1]) if loop else frames
     notes = [n for n in notes if n['start'] < end]
+    # a long silent tail (e.g. a final chord with a SID release far longer than the
+    # Uzebox can do) would leave the loop waiting in silence: restart MAX_TAIL after
+    # the last note ends instead
+    tail_cut = 0
+    if loop and notes:
+        last = max(min(n['end'], end) for n in notes)
+        if end - last > MAX_TAIL * PAL_HZ:
+            tail_cut = end - (last + int(MAX_TAIL * PAL_HZ))
+            end = last + int(MAX_TAIL * PAL_HZ)
+            loop = (loop[0], end - loop[0])
     # instruments: drums (noise) first so drum note numbers = patch numbers
     keys = []
     for n in notes:
@@ -563,12 +576,11 @@ def convert(tune, frames, out, cache=None, forced_loop=None):
     rep.append('  notes mixing waveforms (e.g. a noise attack on a tonal note): %d - played as their main waveform' % sum(1 for n in notes if n['mixed']))
     rep.append('  notes with vibrato or sub-semitone bends: %d - played without it' % sum(1 for n in notes if n['vib']))
     rep.append('  ring-modulated notes: %d - played on a distorted sine (wave 6)' % sum(1 for n in notes if n['kind'] == 'ring'))
-    rep.append('  pulse-width sweeps: played at the nearest of 25/50/75%% duty')
-    est = sum(1 for _ in notes) * 5 + sum(1 for t in tracks[:3] for e in t if e[1][0] & 0xF0 == 0xC0) * 2
-    rep.append('estimated Uzebox song size: ~%d bytes (patches excluded)' % est)
+    rep.append('  pulse-width sweeps: played at the nearest of 25/50/75% duty')
+    if tail_cut: rep.append('silent tail trimmed: %.1f s (the loop restarts %.1f s after the last note)' % (tail_cut / PAL_HZ, MAX_TAIL))
     open(out + '_report.txt', 'w').write('\n'.join(rep) + '\n')
     print('\n'.join(rep))
-    print('stream song: %d bytes, loop restarts at offset %d' % (len(stream), loop_off))
+    print('stream song: %d bytes (this goes into ikspi.bin), loop restarts at offset %d' % (len(stream), loop_off))
     print('wrote %s.mid, %s_patches.inc, %s_report.txt, %s_stream.bin, %s_stream.h' % (out, out, out, out, out))
 
 def out_name(out):
@@ -599,14 +611,16 @@ def main():
     ap.add_argument('--seconds', type=float, default=300)
     ap.add_argument('--out')
     ap.add_argument('--gap', type=int, default=4, help='write a note-off only before a rest of at least this many frames (default 4)')
+    ap.add_argument('--max-tail', type=float, default=2.0, help='trim silence before the loop point to this many seconds (default 2)')
     ap.add_argument('--loop', help='force the loop: START,LENGTH in seconds')
     ap.add_argument('--cache', help='save/reuse the captured register log (pickle), to skip the slow emulation on reruns')
     a = ap.parse_args()
     tune = get_tune(a)
     frames = int(a.seconds * PAL_HZ)
     if a.command == 'convert':
-        global GAP_FRAMES
+        global GAP_FRAMES, MAX_TAIL
         GAP_FRAMES = a.gap
+        MAX_TAIL = a.max_tail
         fl = None
         if a.loop:
             st, ln = [float(x) for x in a.loop.split(',')]

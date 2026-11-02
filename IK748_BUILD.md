@@ -70,7 +70,7 @@ You can now close VICE.
 python3 sid2uze.py convert --ram ram_music.bin --init AE00,AE09 --play AE0C --seconds 900 --cache ik_log.pkl --out ikmusic
 ```
 
-The first run emulates 15 minutes of music and takes several minutes; reruns with the same `--cache` file take seconds. It should report a loop of about 663 s and a stream song of about 25 KB, and write `ikmusic_stream.bin`, `ikmusic_stream.h` and `ikmusic_patches.inc` (plus `ikmusic.mid` and `ikmusic_report.txt`). See `README-sid2uze.md`.
+The first run emulates 15 minutes of music and takes several minutes; reruns with the same `--cache` file take seconds. It should report a loop of about 633 s (a 30-second silent tail is trimmed) and a stream song of about 38 KB, and write `ikmusic_stream.bin`, `ikmusic_stream.h` and `ikmusic_patches.inc` (plus `ikmusic.mid` and `ikmusic_report.txt`). See `README-sid2uze.md`.
 
 **8. Convert the graphics, bonus data and music**
 
@@ -82,7 +82,7 @@ Leave out `--music ikmusic_stream.bin` if you skipped steps 6 and 7. Use the key
 
 - ends with `verify OK` for all four stages and for the fighters;
 - lists `SPI_BONUS_TILES` and `SPI_FIGHTER_MASKS`, and `SPI_MUSIC` with music;
-- shows an SPI total under 131,072 bytes (about 90 KB without music, about 115 KB with it).
+- shows an SPI total under 131,072 bytes (about 90 KB without music, about 128 KB with it: close to the limit).
 
 If you converted the music, copy its two headers into the build folder (the game builds without music if they're missing):
 

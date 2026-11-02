@@ -397,6 +397,11 @@ static void bub(u8 b) { (void)b; }
 static void ready(void)
 {
 	fight_place();
+	/* both fighters bow, as the C64 does at the start of a bout: the move is started
+	** and the request cleared, so it plays through once and they return to standing
+	** (the C64 skips this when both players are human; here they always bow) */
+	fight_start_move(0U, MOVE_BOW); fgt[0].req = MOVE_STAND;
+	fight_start_move(1U, MOVE_BOW); fgt[1].req = MOVE_STAND;
 	ai_reset(level);
 	state = ST_READY; timer = T_READY;
 	fgt_vis = 3U;
@@ -498,8 +503,9 @@ static void game_step(void)
 	sounds_after_tick();
 
 	switch (state) {
-	case ST_READY:
-		if (--timer == 0U) { state = ST_FIGHT; bub(0xFFU); }
+	case ST_READY:                       /* fight once the bow is over */
+		if (timer != 0U) { timer --; }
+		if ((timer == 0U) && (fgt[0].move != MOVE_BOW) && (fgt[1].move != MOVE_BOW)) { state = ST_FIGHT; bub(0xFFU); }
 		break;
 	case ST_FIGHT:
 		if (fight_hit_test(&h)) { award(&h); }
@@ -839,7 +845,8 @@ int main(void)
 		music_feed();                          /* still in the blank period */
 #endif
 		c64_sound_frame();
-		if (((state == ST_READY) || (state == ST_FIGHT) || (state == ST_POINT)) && (tsec != 0U)) {
+		if (((state == ST_READY) || (state == ST_FIGHT) || (state == ST_POINT)) && (tsec != 0U)
+		    && (fgt[0].move != MOVE_BOW)) {    /* as on the C64, the clock waits for the bow */
 			if (--tfr == 0U) { tfr = 60U; tsec --; time_dirty = true; }
 		}
 		if (++clk >= STEP_FRAMES) { clk = 0U; game_step(); redraw = true; }

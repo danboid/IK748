@@ -13,6 +13,10 @@ length (long enough for the start of the tune to come round again; --loop START,
 in seconds forces it) and --cache FILE to keep
 the captured register log, so reruns skip the slow 6502 emulation.
 
+--max-tail SECONDS (default 2) trims silence before the loop point, so tunes that end with
+a long fade or pause restart promptly. --gap N (default 4) writes a note-off only before a
+rest of at least N frames.
+
 Then convert the MIDI with the Uzebox midiconv tool:
 
     midiconv -f 72 -1 -2 -3 tune.mid tune_song.inc

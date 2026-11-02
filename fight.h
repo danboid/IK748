@@ -40,6 +40,7 @@ typedef struct {
 #define MOVE_STAND    0U
 #define MOVE_TURN     8U     /* up + away */
 #define MOVE_BLOCK   20U
+#define MOVE_BOW     28U     /* the bow at the start of every bout */
 #define MOVE_VICTORY 32U
 
 typedef struct {
