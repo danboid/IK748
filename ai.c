@@ -8,11 +8,13 @@
 #include "ai.h"
 #include "fight.h"
 
-static u8  lvl, delay, rng = 0x5AU, rng2 = 0xC3U;
+static u8  lvl, rng = 0x5AU, rng2 = 0xC3U;
 static u8  fwd_move, back_move;
-static u8  cur;                   /* move the AI is currently requesting (0 = none) */
-static u8  hold;                  /* ticks left to keep requesting it */
-static u8  is_atk, seen;
+/* per fighter, so the computer can play both sides (attract mode) */
+static u8  delay[2];
+static u8  cur[2];                /* move the AI is currently requesting (0 = none) */
+static u8  hold[2];               /* ticks left to keep requesting it */
+static u8  is_atk[2], seen[2];
 
 u8 ai_rand(void)
 {
@@ -24,8 +26,8 @@ u8 ai_rand(void)
 void ai_reset(u8 level)
 {
 	lvl   = (level > 7U) ? 7U : level;
-	delay = 8U;
-	cur   = 0U; hold = 0U;
+	delay[0] = delay[1] = 8U;
+	cur[0] = cur[1] = 0U; hold[0] = hold[1] = 0U;
 	/* which walk goes forward: the one whose steps carry the fighter towards its facing */
 	fwd_move  = (fight_move_dx(3U) > 0) ? 3U : 7U;
 	back_move = (fwd_move == 3U) ? 7U : 3U;
@@ -34,7 +36,7 @@ void ai_reset(u8 level)
 static u8 react_ticks(void) { return (u8)((lvl >= 3U) ? 0U : (3U - lvl)); }   /* 3 .. 0 */
 static u8 chance(u8 base, u8 per) { u16 c = (u16)base + (u16)per * lvl; return (c > 240U) ? 240U : (u8)c; }
 
-static u8 pick(u8 m, u8 ticks, u8 attack) { cur = m; hold = ticks; is_atk = attack; seen = 0U; return m; }
+static u8 pick(u8 me, u8 m, u8 ticks, u8 attack) { cur[me] = m; hold[me] = ticks; is_atk[me] = attack; seen[me] = 0U; return m; }
 
 u8 ai_think(u8 me)
 {
@@ -47,23 +49,23 @@ u8 ai_think(u8 me)
 	/* keep requesting the chosen move for a while: attacks until the strike
 	** frame has been shown (then let go so held kicks retract), others for a
 	** few ticks */
-	if (cur != 0U) {
-		if (is_atk) {
-			if (seen) { cur = 0U; return 0U; }
-			if ((f->move == cur) && fight_is_strike_frame(f->frame)) { seen = 1U; }
+	if (cur[me] != 0U) {
+		if (is_atk[me]) {
+			if (seen[me]) { cur[me] = 0U; return 0U; }
+			if ((f->move == cur[me]) && fight_is_strike_frame(f->frame)) { seen[me] = 1U; }
 		}
-		if (hold != 0U) { hold --; return cur; }
-		cur = 0U;
+		if (hold[me] != 0U) { hold[me] --; return cur[me]; }
+		cur[me] = 0U;
 	}
 
-	if (delay != 0U) { delay --; return 0U; }
-	delay = react_ticks();
+	if (delay[me] != 0U) { delay[me] --; return 0U; }
+	delay[me] = react_ticks();
 
 	code = fight_rel(me, &dist);
 
 	/* opponent striking close by: block sometimes */
 	if (o->atk && (dist < 8U) && (ai_rand() < chance(40U, 22U))) {
-		delay = 1U; return pick(MOVE_BLOCK, 3U, 0U);
+		delay[me] = 1U; return pick(me, MOVE_BLOCK, 3U, 0U);
 	}
 
 	/* attacks that would land, judged from where we'd stand and which way we'd
@@ -83,18 +85,18 @@ u8 ai_think(u8 me)
 			nfit ++;
 		}
 	}
-	if ((nfit != 0U) && (ai_rand() < chance(110U, 20U))) { return pick(best, 12U, 1U); }
+	if ((nfit != 0U) && (ai_rand() < chance(110U, 20U))) { return pick(me, best, 12U, 1U); }
 
 	/* opponent behind us and nothing to throw: turn round */
-	if (((code >> 2) & 1U) != f->face) { return pick(MOVE_TURN, 2U, 0U); }
+	if (((code >> 2) & 1U) != f->face) { return pick(me, MOVE_TURN, 2U, 0U); }
 
 	/* otherwise manoeuvre */
-	if (dist > 6U)  { return pick(fwd_move, (u8)((dist > 10U) ? 4U : 1U), 0U); }
-	if (dist < 2U)  { return pick(back_move, 2U, 0U); }
+	if (dist > 6U)  { return pick(me, fwd_move, (u8)((dist > 10U) ? 4U : 1U), 0U); }
+	if (dist < 2U)  { return pick(me, back_move, 2U, 0U); }
 	if (ai_rand() < chance(50U, 10U)) {
 		/* probe with a random attack now and then */
-		if ((atk_count != 0U) && (ai_rand() & 1U)) { return pick(atk_list[ai_rand() % atk_count].move, 12U, 1U); }
-		return pick(fwd_move, 2U, 0U);
+		if ((atk_count != 0U) && (ai_rand() & 1U)) { return pick(me, atk_list[ai_rand() % atk_count].move, 12U, 1U); }
+		return pick(me, fwd_move, 2U, 0U);
 	}
 	return 0U;
 }

@@ -289,11 +289,20 @@ static u8   bouts, wins, klevel;      /* running order (C64 rules) */
 static u8   tsec, tfr;
 static bool time_dirty, bout_won;
 static bool hud_clear_pending;      /* clear the HUD lines at the next blank (SPI access only there) */
+/* Attract mode (as on the C64): after a while idle on the title screen the computer
+** plays both fighters, with DEMO on the HUD, cycling the stages; any button or a few
+** bouts return to the title. */
+#define DEMO_IDLE_STEPS 180U          /* 15 s on the title screen (steps of 5 frames) */
+#define DEMO_BOUTS        3U
+#define DEMO_LEVEL        3U
+static bool demo;
+static u8   idle, demo_bouts, demo_next;
 
 static const char s_over[]  PROGMEM = "GAME OVER";
 static const char s_p1[]    PROGMEM = "1 PLAYER";
 static const char s_p2[]    PROGMEM = "2 PLAYERS";
 static const char s_start[] PROGMEM = "PRESS START";
+static const char s_demo[]  PROGMEM = "DEMO";
 
 #define COL_WHITE 1U
 #define COL_RED   2U
@@ -447,7 +456,7 @@ static void new_stage(u8 s)
 	set_stage(s);
 	hud_set_base(pgm_read_dword(&stage_bitmap[s])); hud_clear_pending = true; hud_dirty = true;
 	fgt[0].points = fgt[1].points = 0U;
-	tsec = (players == 1U) ? BOUT_TIME_1P : BOUT_TIME_2P;
+	tsec = ((players == 1U) || demo) ? BOUT_TIME_1P : BOUT_TIME_2P;
 	tfr  = 30U;                      /* the C64's first second is half length */
 	ready();
 }
@@ -459,7 +468,19 @@ static void title(void)
 	hud_set_base(pgm_read_dword(&stage_bitmap[0])); hud_clear_pending = true;
 	fight_place();
 	state = ST_TITLE;
+	demo = false; idle = 0U; msg = 0;
+	time_dirty = false; bub(0xFFU);              /* no clock or speech bubble on the title */
 	hud_dirty = true;
+}
+
+static void start_demo(void)
+{
+	demo = true; demo_bouts = 0U;
+	fgt[0].score = fgt[1].score = 0U;
+	level = DEMO_LEVEL; bouts = 0U; wins = 0U; klevel = 0U;
+	new_stage(demo_next);                       /* a different stage each time */
+	demo_next = (u8)((demo_next + 1U) % STAGE_COUNT);
+	say(s_demo, COL_MSG);
 }
 
 static void award(hit_t const* h)
@@ -506,7 +527,11 @@ static void game_step(void)
 	pad_latch[0] = ReadJoypad(0U);
 	pad_latch[1] = ReadJoypad(1U);
 
+	if (demo && ((p0 | p1) != 0U)) { title(); return; }   /* any button ends the demo */
+
 	if (state == ST_TITLE) {
+		if ((p0 | p1) != 0U) { idle = 0U; }
+		else if (++idle >= DEMO_IDLE_STEPS) { start_demo(); return; }
 		if (hit & (BTN_LEFT | BTN_RIGHT)) { players = (players == 1U) ? 2U : 1U; sfx(SFX_BLIP); hud_dirty = true; }
 		if (hit & (BTN_START | BTN_A | BTN_B)) {
 			fgt[0].score = fgt[1].score = 0U; level = 0U; bouts = 0U; wins = 0U; klevel = 0U;
@@ -524,9 +549,14 @@ static void game_step(void)
 	if (state == ST_BONUS) { bonus_step(); return; }
 #endif
 	if (state == ST_FIGHT) {
-		fight_input(0U, p0);
-		if (players == 2U) { fight_input(1U, p1); }
-		else               { fgt[1].req = ai_think(1U); }
+		if (demo) {
+			fgt[0].req = ai_think(0U);
+			fgt[1].req = ai_think(1U);
+		} else {
+			fight_input(0U, p0);
+			if (players == 2U) { fight_input(1U, p1); }
+			else               { fgt[1].req = ai_think(1U); }
+		}
 	}
 	fight_tick(tick_alt);
 	fight_tick(tick_alt ^ 1U);
@@ -559,7 +589,7 @@ static void game_step(void)
 	case ST_POINT:
 		if (--timer == 0U) {
 			if (bout_won) {
-				if ((players == 1U) && (winner == 1U)) {
+				if (!demo && (players == 1U) && (winner == 1U)) {
 					state = ST_OVER; timer = T_OVER; say(s_over, COL_RED); sfx(SFX_LOSE);
 				} else {
 					state = ST_WIN; timer = T_WIN;
@@ -575,7 +605,7 @@ static void game_step(void)
 			if (timer < 2U) { timer = 2U; }
 		}
 		if (--timer == 0U) {
-			if (players == 1U) { level ++; }
+			if ((players == 1U) && !demo) { level ++; }
 			after_bout();
 		}
 		break;
@@ -773,6 +803,10 @@ static void bonus_step(void)
 static void after_bout(void)
 {
 	u8 next = (u8)((stage + 1U) % STAGE_COUNT), ph = 1U;
+	if (demo) {                                  /* no bonus rounds in the demo */
+		if (++demo_bouts >= DEMO_BOUTS) { title(); } else { new_stage(next); }
+		return;
+	}
 	bouts ++;
 	if (players == 2U) {
 #if HAVE_BONUS
@@ -877,7 +911,7 @@ int main(void)
 		/* Only one SPI-heavy job per vblank: HUD text, or a sprite redraw.
 		** Sprites keep their RAM tiles on frames without a redraw. */
 		if (hud_dirty)        { if (hud_clear_pending) { hud_clear(); hud_clear_pending = false; } hud_redraw(); }
-		else if (time_dirty)  { hud_time(); }
+		else if (time_dirty)  { if (state != ST_TITLE) { hud_time(); } else { time_dirty = false; } }
 		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
 		pad_latch[0] |= ReadJoypad(0U);
 		pad_latch[1] |= ReadJoypad(1U);
