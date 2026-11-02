@@ -13,6 +13,8 @@
 #define HUD_MARK_EMPTY  '$'
 
 void hud_init(u32 bitmap_spi);                           /* set stage bitmap, clear HUD lines */
+void hud_set_base(u32 bitmap_spi);                         /* set stage bitmap only (no SPI access) */
+void hud_clear(void);                                    /* clear the HUD lines */
 void hud_text(u8 col, u8 y, const char* s, u8 colour);  /* RAM string */
 void hud_text_P(u8 col, u8 y, const char* s, u8 colour);/* flash string */
 void hud_blank(u8 col, u8 y, u8 len);                   /* clear len cells (5 lines) */

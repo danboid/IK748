@@ -288,6 +288,7 @@ static u8   bouts, wins, klevel;      /* running order (C64 rules) */
 #endif
 static u8   tsec, tfr;
 static bool time_dirty, bout_won;
+static bool hud_clear_pending;      /* clear the HUD lines at the next blank (SPI access only there) */
 
 static const char s_over[]  PROGMEM = "GAME OVER";
 static const char s_p1[]    PROGMEM = "1 PLAYER";
@@ -444,7 +445,7 @@ static void new_stage(u8 s)
 {
 	stage = s;
 	set_stage(s);
-	hud_init(pgm_read_dword(&stage_bitmap[s]));
+	hud_set_base(pgm_read_dword(&stage_bitmap[s])); hud_clear_pending = true; hud_dirty = true;
 	fgt[0].points = fgt[1].points = 0U;
 	tsec = (players == 1U) ? BOUT_TIME_1P : BOUT_TIME_2P;
 	tfr  = 30U;                      /* the C64's first second is half length */
@@ -455,7 +456,7 @@ static void title(void)
 {
 	stage = 0U;
 	set_stage(0U);
-	hud_init(pgm_read_dword(&stage_bitmap[0]));
+	hud_set_base(pgm_read_dword(&stage_bitmap[0])); hud_clear_pending = true;
 	fight_place();
 	state = ST_TITLE;
 	hud_dirty = true;
@@ -509,7 +510,7 @@ static void game_step(void)
 		if (hit & (BTN_LEFT | BTN_RIGHT)) { players = (players == 1U) ? 2U : 1U; sfx(SFX_BLIP); hud_dirty = true; }
 		if (hit & (BTN_START | BTN_A | BTN_B)) {
 			fgt[0].score = fgt[1].score = 0U; level = 0U; bouts = 0U; wins = 0U; klevel = 0U;
-			hud_init(pgm_read_dword(&stage_bitmap[0]));
+			hud_set_base(pgm_read_dword(&stage_bitmap[0])); hud_clear_pending = true;
 			new_stage(0U);
 #if defined(START_BONUS) && HAVE_BONUS
 			bonus_begin(START_BONUS, 1U);
@@ -853,11 +854,16 @@ int main(void)
 	while (1) {
 		wait_render_done();
 		ClearVsyncFlag();
-		/* Only one SPI-heavy job per vblank: HUD text, or a sprite redraw.
-		** Sprites keep their RAM tiles on frames without a redraw. */
-		if (hud_dirty)        { hud_redraw(); }
-		else if (time_dirty)  { hud_time(); }
-		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
+		/* Every SPI RAM access by the main program happens here, at the start of the
+		** blank period: the sprite redraw below may run on into the display, where Mode
+		** 4's rows stream from SPI RAM in the video interrupt, and an SPI transfer of ours
+		** interrupted by it would read wrong data (that is what stopped the music). */
+#if HAVE_MUSIC
+		music_feed();
+#endif
+#if HAVE_BONUS
+		if (state == ST_BONUS) { bonus_frame(); }   /* reads collision masks from SPI RAM */
+#endif
 #ifdef DEBUG_TIMING
 		{ static u8 t; if ((++t & 31U) == 0U) { char b[14]; b[0]='L'; b[1]=(char)('0'+(late_rows>9U?9U:late_rows)); b[2]=' '; b[3]='S'; b[4]=(char)('0'+state);
 		  b[5]=' '; b[6]=(char)('0'+fgt[0].points); b[7]=(char)('0'+fgt[1].points); b[8]=' ';
@@ -868,12 +874,14 @@ int main(void)
 #endif
 		  hud_text(14U, 9U, b, 7U); } }
 #endif
+		/* Only one SPI-heavy job per vblank: HUD text, or a sprite redraw.
+		** Sprites keep their RAM tiles on frames without a redraw. */
+		if (hud_dirty)        { if (hud_clear_pending) { hud_clear(); hud_clear_pending = false; } hud_redraw(); }
+		else if (time_dirty)  { hud_time(); }
+		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
 		pad_latch[0] |= ReadJoypad(0U);
 		pad_latch[1] |= ReadJoypad(1U);
 
-#if HAVE_MUSIC
-		music_feed();                          /* still in the blank period */
-#endif
 		c64_sound_frame();
 		if (((state == ST_READY) || (state == ST_FIGHT) || (state == ST_POINT)) && (tsec != 0U)
 		    && (fgt[0].move != MOVE_BOW)) {    /* as on the C64, the clock waits for the bow */
@@ -881,8 +889,7 @@ int main(void)
 		}
 		if (++clk >= STEP_FRAMES) { clk = 0U; game_step(); redraw = true; }
 #if HAVE_BONUS
-		if (state == ST_BONUS) { bonus_frame(); }
-		else if (redraw) {
+		if ((state != ST_BONUS) && redraw) {
 			nextras = 0U;
 			if (bubble != 0xFFU) {
 				extras_add((BonusTile const*)pgm_read_word(&bub_tiles[bubble]), pgm_read_byte(&bub_len[bubble]),

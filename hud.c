@@ -63,11 +63,14 @@ void hud_blank(u8 col, u8 y, u8 len)
 	for (r = 0U; r < 5U; r++) { put_row(col, y + r, buf, 2U * len); }
 }
 
-void hud_init(u32 bitmap_spi)
+void hud_set_base(u32 bitmap_spi) { hud_base = bitmap_spi; }
+
+void hud_init(u32 bitmap_spi) { hud_base = bitmap_spi; hud_clear(); }
+
+void hud_clear(void)
 {
 	u8* buf = rowbuf;
 	u8 i;
-	hud_base = bitmap_spi;
 	for (i = 0U; i < LINE_BYTES; i++) { buf[i] = 0U; }
 	for (i = 0U; i < HUD_LINES; i++) {
 		u32 a = hud_base + (u32)(i) * LINE_BYTES;
