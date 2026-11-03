@@ -389,6 +389,8 @@ static void hud_redraw(void)
 	char b[8];
 	u8 len;
 
+	if (hud_clear_pending) { hud_clear(); hud_clear_pending = false; }   /* new stage: clear first */
+
 	if (state == ST_TITLE) {
 		hud_blank(0U, 2U, 40U);
 		hud_blank(0U, 9U, 40U);
@@ -910,7 +912,7 @@ int main(void)
 #endif
 		/* Only one SPI-heavy job per vblank: HUD text, or a sprite redraw.
 		** Sprites keep their RAM tiles on frames without a redraw. */
-		if (hud_dirty)        { if (hud_clear_pending) { hud_clear(); hud_clear_pending = false; } hud_redraw(); }
+		if (hud_dirty)        { hud_redraw(); }
 		else if (time_dirty)  { if (state != ST_TITLE) { hud_time(); } else { time_dirty = false; } }
 		else if (redraw) { M74_VramRestore(); draw_both(); redraw = false; }
 		pad_latch[0] |= ReadJoypad(0U);
